@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Open Emotion Wheel</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+    	}
+        
+        html, body {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            overflow-x: hidden;
+        }
+        /* Container for pie chart and info */
+        #container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            flex-direction: column; /* Stack vertically by default */
+        }
+        
+        #pie-chart {
+            width: 100%;
+            height: auto;
+            max-width: 800px;
+            max-height: 800px;
+            margin: 0;
+            padding: 0;
+            display: block;
+            cursor: grab;
+            touch-action: none; /* Prevent default touch behaviors */
+            -webkit-user-select: none; /* Prevent selection on iOS */
+            -webkit-touch-callout: none; /* Prevent callout on iOS */
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+        }
+        
+        #pie-chart.dragging {
+            cursor: grabbing;
+        }
+        
+        #pie-chart path {
+          cursor: pointer; /* Change the cursor to pointer on hover */
+          pointer-events: all;
+        }
+        
+        #pie-chart text {
+    		user-select: none; /* Prevent text selection */
+            cursor: pointer;
+            pointer-events: all;
+		}
+        
+        /* Info section styling */
+        #info {
+            margin-top: 10px;
+            text-align: left;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+        
+        #info-text {
+            margin-top: 20px;
+        }
+        
+        #info-strategies {
+            margin-top: 20px;
+        }
+        
+        #info-heading-strat {
+                padding-top: 20px;
+        }
+
+    	/* Adjust layout on screens wider than 1000px */
+        @media (min-width: 1000px) {
+            #container {
+                flex-direction: row; /* Place items side by side */
+                align-items: flex-start; /* Align items at the top */
+                padding: 30px;
+            }
+
+            #info {
+                margin-top: 20px;
+                margin-left: 40px; /* Add space between chart and info */
+                text-align: left;
+                width: 400px;
+            }
+            #info-heading {
+                padding-top: 0px;
+        	}
+            
+    </style>
+
+	<div id="container">
+    	<svg id="pie-chart" viewBox="50 50 700 700">
+            <g id="wheel-group" transform="rotate(0 400 400)"></g>
+        </svg>
+    	<div id="info">
+        	<h2 id="info-heading">Emotion information</h2>
+        	<p id="info-text">Select an emotion to begin or try spinning the wheel.</p>
+            <h3 id="info-heading-strat"></h3>
+            <p id="info-strategies"></p>
+        </div>
+    </div>
+    <script>document.addEventListener("DOMContentLoaded", function() {
+      
+    const selectedSlices = []; // Store up to 2 selected slices
+    let currentRotation = 0;
+    let isDragging = false;
+    let startAngle = 0;
+    let startRotation = 0;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragThreshold = 5; // pixels
+  
+    const data1 = [
+            { value: 1, color: '#f4d03f', label: 'Happy' , description: 'Happy means you feel really good inside. You might smile, laugh, or want to play. Being happy is when things are going your way.', strategy: '1. Look around and enjoy the fun things you see, hear, and feel.<br>2. Tell someone what made you happy: "I feel happy because ___"<br>3. Think about what made you happy and how you can do it again.'},
+            { value: 1, color: '#3498db', label: 'Sad' , description: 'Sad is when your heart feels heavy. You might cry or want to be alone. It happens when something makes you feel bad or hurt.', strategy: '1. Remember it’s okay to feel sad. Everyone feels sad sometimes.<br>2. Talk to someone you trust, like a parent or teacher. Tell them what makes you feel sad: "I feel sad because ___"<br>3. Do something you enjoy doing, like drawing or listening to calming music.'},
+            { value: 1, color: '#ec7063', label: 'Angry' , description: 'Angry is when you feel hot and upset inside. You might want to yell or stomp your feet. It happens when something feels unfair or wrong.', strategy: '1. Take deep breaths and count to 10.<br>2. Run, jump, or squeeze a pillow to let your anger out safely.<br>3. Tell someone you trust what’s wrong and what you need: "I feel angry because ___"'},
+            { value: 1, color: '#af7ac5', label: 'Worried' , description: 'Worried means you’re thinking something bad might happen. You might feel nervous or find it hard to focus on other things. It’s like having a storm in your mind.', strategy: '1. Remember it’s okay to feel worried. Everyone feels worried sometimes.<br>2. Take deep breaths or look at five things around you.<br>3. Divide any problems into little steps and do one at a time. 4. Tell someone you trust what is causing you to feel worried: "I feel worried because ___"'},
+            { value: 1, color: '#58d68d', label: 'Disgusted' , description: 'Disgusted is when something feels yucky or wrong. You might want to avoid something you see, hear, experience or think about that seems not nice.', strategy: '1. Think about why something feels gross or wrong.<br>2. Tell someone you trust what is making you feel disgusted "I saw/though about ___ and it make me feel disgusted".<br>3. Take deep breaths and do something that feels nice.'},
+        ];
+    const data2 = [
+            { value: 14.6, color: '#f7dc6f', label: 'Hopeful', description: 'Hopeful means you believe something good can happen. You feel like things might get better soon. It’s like a bright light inside you.' , strategy: '1. Think about what you’re thankful for today.<br>2. Make a small goal and picture yourself doing it.<br>3. Be around people who make you feel happy and strong.'},
+            { value: 14.6, color: '#f7dc6f', label: 'Proud' , description: 'Proud is when you feel good about what you did. You might smile big or tell someone, “I did it!” It happens when you work hard and do well.', strategy: '1. Say to yourself, “I did a great job!”<br>2. Tell someone you trust about what you did: "I’m proud because ___"<br>3. Use that proud feeling to try something new.' },
+            { value: 14.6, color: '#f7dc6f', label: 'Excited' , description: 'Excited is when you can’t wait for something to happen. Your heart beats fast and you feel bouncy. It’s like having butterflies in your tummy in a good way.', strategy: '1. Make a plan for what you’re looking forward to.<br>2. Tell someone about why you’re excited: "I’m excited about ___"<br>3. Enjoy the happy feeling!' },
+            { value: 14.6, color: '#f7dc6f', label: 'Powerful' , description: 'Powerful means you feel strong and brave. You think you can do big things. It’s like having superhero energy inside you.', strategy: '1. Think about something you’re really good at.<br>2. Say “no” when something doesn’t feel right.<br>3. Help someone else—sharing your strength feels good.' },
+            { value: 14.6, color: '#5dade2', label: 'Lonely', description: 'Lonely is when you feel all alone. You might wish someone was there to play or talk with. It feels empty and quiet in your heart.', strategy: '1. Tell someone you trust about how you feel: "I feel lonely because ___".<br>2. Try something new like joining a group or game to make new friends.<br>3. Be kind to yourself. Everyone feels lonely sometimes.'  },
+            { value: 14.6, color: '#5dade2', label: 'Powerless', description: 'Powerless is when you feel like you can’t do anything to help. Things seem too big or hard to fix. It makes you feel very small.', strategy: '1. Draw or write about how you feel.<br>2. Ask someone you trust for help: "I want to ___ but I don’t know how to do it."<br>3. Do something small you can do and enjoy.'  },
+            { value: 14.6, color: '#5dade2', label: 'Guilty', description: 'Guilty means you feel bad whe you think you did something wrong. You might want to say sorry. It’s like a heavy feeling in your chest.', strategy: '1. Think about what happened and why you feel bad. Talk to someone you trust about whether it is something you should really feel guilty for: "I did ___ and I feel guilty. Should I?"<br>2. Say sorry to someone if you need to.<br>3. Remember that everyone makes mistakes. It’s how we learn.'  },
+            { value: 14.6, color: '#5dade2', label: 'Hurt', description: 'Hurt is when someone or something makes you feel pain inside. You might cry or feel broken. It can be from something physical or emotional like mean words.', strategy: '1. Remember that feeling hurt is a normal emotion when someone or something happens to us that we don’t like.<br>2. Talk to someone who cares about you: "I feel hurt because ___"<br>3. Do something nice for yourself like resting or drawing.'  },
+            { value: 14.6, color: '#f1948a', label: 'Humiliated' , description: 'Humiliated means you feel really embarrassed. You might want to hide or run away.', strategy: '1. Remember that feeling humiliated ot embarrased is a normal emotion<br>2. Think about whether there is anything you can learn about what happened.<br>3. Talk to someone you trust who can help you feel better: "I felt embarrased when ___' },
+            { value: 14.6, color: '#f1948a', label: 'Bitter' , description: 'Bitter is when you feel angry and sad for a long time. It’s like holding onto a bad feeling. You might think, “That’s not fair!” again and again.', strategy: '1. Think about what’s making you feel this way.<br>2. Write down good things in your life.<br>3. Do something fun to help your heart feel lighter.<br>4. Talk to someone you trust about how you feel: "I can’t stop feeling angry about ___"' },
+            { value: 14.6, color: '#f1948a', label: 'Frustrated', description: 'Frustrated is when you try and try, but things don’t work. You might feel stuck or want to give up. It’s like being trapped in a puzzle you can’t solve.', strategy: '1. Take a break and do something else for a while.<br>2. Focus on the parts of the problem that you can fix.<br>3. Take deep breaths to calm down.<br>4. Talk to someone you trust about how you feel: "I feel frustrated because I keep trying ___ and it’s not working".'  },
+            { value: 14.6, color: '#f1948a', label: 'Critical' , description: 'Critical is when you only see what’s wrong. You might say things like “That’s not good enough.” It’s a way of thinking that points out mistakes.', strategy: '1. Think about whether you are being unfairly hard on someone (this could be yourself!).<br>2. Be kind to yourself. Things might not be going how you expected they would.<br>3. Try to say something helpful instead of just pointing out what’s wrong.<br>4. Talk to someone you trust about how you feel: "I keep thinking that ___ is not doing things right because ___" ' },
+            { value: 14.6, color: '#c39bd3', label: 'Insecure' , description: 'Insecure means you don’t feel sure about yourself. You might think you’re not good enough. It’s like having a shaky feeling inside.', strategy: '1. Make a list of things you like about yourself.<br>2. Try not to compare yourself to others。 Just do what you believe is the best that you can do.<br>3. Talk to someone you trust who believes in you: "I feel that I’m not as ___ as ____"' },
+            { value: 14.6, color: '#c39bd3', label: 'Helpless' , description: 'Helpless means you can’t fix something, even if you want to. You might feel like nothing you do helps. It makes you want someone else to take over.', strategy: '1. Remember that feeling helpless is a normal feeling.<br>2. Try doing one little thing to help yourself feel strong and in control of the situation.<br>3. Talk to someone you trust about how you feel: "I want to ___, but I don’t feel like I can".' },
+            { value: 14.6, color: '#c39bd3', label: 'Excluded' , description: 'Excluded is when you feel left out. Maybe others are playing but don’t let you join. It makes you feel invisible or not wanted.', strategy: '1. It’s normal to feel sad when you are left out of something that you want to be in.<br>2. Talk to someone you trust who cares about you: "I wanted to ___ but ___ didn’t let me."<br>3. Think about what whether there is something you can do differently next time, or whether there might be other people you could join who won’t leave you out.' },
+            { value: 14.6, color: '#c39bd3', label: 'Threatened' , description: 'Threatened means you feel unsafe or in danger. You might want to hide or fight back. It’s like your body is getting ready to protect you.', strategy: '1. Think about whether you’re really in danger or just thinking about being in danger.<br>2. Take deep breaths to calm down.<br>3. Talk to someone safe who you trust: "I feel scared because ___".' },
+            { value: 14.6, color: '#82e0aa', label: 'Repelled' , description: 'Repelled means you want to get away from something. It might be gross, scary, or just wrong. It feels like saying, “No, I don’t want that!”', strategy: '1. Think about why you really don’t like something.<br>2. Remind yourself it’s okay to dislike things.<br>3. Do something fun that makes you feel better.<br>4. Talk to someone you trust about what you don’t like: "I saw ___ and it made me feel really uncomfortable"' },
+            { value: 14.6, color: '#82e0aa', label: 'Awful' , description: 'Awful is when everything feels really bad. You might feel sick, sad, or upset all at once.', strategy: '1. Remember that it’s normal to feel bad when bad things happen.<br>2. Do something gentle and kind for yourself.<br>3. Talk to someone you trust about how you feel: "___ didn’t go how I expected and I feel really bad because ____".' },
+            { value: 14.6, color: '#82e0aa', label: 'Disapproving' , description: 'Disapproving is when you don’t like what someone did. You might frown or shake your head. It’s a way of saying, “I don’t think that’s okay.”', strategy: '1. Think about or write down why you don’t like what someone did.<br>2. Try to understand their side too.<br>3. Talk to someone you trust about how you feel: "I didn’t like it when ____ did ____."<br>4. If you feel it’s safe, say what you think to in a kind and helpful way.' },
+            { value: 14.6, color: '#82e0aa', label: 'Startled', description: 'Startled is when something surprises you quickly. Your heart jumps and you might gasp. It’s like getting a shock from something loud or fast.', strategy: '1. Take a deep breath and relax your shoulders.<br>2. Think about what surprised you and why.<br>3. Do something calming like stretching or slow breathing.<br>4. Talk to someone you trust as soon as you can about what startled you: "I felt really surprised when ____"'},
+    ];
+
+   
+const total1 = data1.reduce((sum, slice) => sum + slice.value, 0);
+const total2 = data2.reduce((sum, slice) => sum + slice.value, 0);
+
+let currentAngle1 = 0;
+let currentAngle2 = 0;
+
+const svg = document.getElementById('pie-chart');
+const wheelGroup = document.getElementById('wheel-group');
+const centerX = 400;
+const centerY = 400;
+let selectedSlice = null; // To track the currently selected slice (changed from selectedSegment)
+
+// Function to get angle from center
+const getAngle = (x, y) => {
+    const rect = svg.getBoundingClientRect();
+    const svgCenterX = rect.left + rect.width / 2;
+    const svgCenterY = rect.top + rect.height / 2;
+    return Math.atan2(y - svgCenterY, x - svgCenterX) * (180 / Math.PI);
+};
+
+// Check if movement exceeded threshold
+const hasDraggedEnough = (startX, startY, currentX, currentY) => {
+    const distance = Math.sqrt(Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2));
+    return distance > dragThreshold;
+};
+
+// Mouse event handlers
+const handleMouseDown = (e) => {
+    isDragging = true;
+    svg.classList.add('dragging');
+    startAngle = getAngle(e.clientX, e.clientY);
+    startRotation = currentRotation;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    e.preventDefault();
+};
+
+const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    
+    const currentAngle = getAngle(e.clientX, e.clientY);
+    const angleDelta = currentAngle - startAngle;
+    
+    currentRotation = startRotation + angleDelta;
+    
+    wheelGroup.setAttribute('transform', `rotate(${currentRotation} ${centerX} ${centerY})`);
+    updateLabelRotations();
+};
+
+const handleMouseUp = (e) => {
+    if (isDragging) {
+        const didDrag = hasDraggedEnough(dragStartX, dragStartY, e.clientX, e.clientY);
+        isDragging = false;
+        svg.classList.remove('dragging');
+        
+        // If we didn't drag enough, treat it as a click
+        if (!didDrag) {
+            // Find what element we're over and trigger click
+            const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+            if (elementBelow && elementBelow !== svg) {
+                elementBelow.click();
+            }
+        }
+    }
+};
+
+// Touch event handlers
+const handleTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    isDragging = true;
+    svg.classList.add('dragging');
+    startAngle = getAngle(touch.clientX, touch.clientY);
+    startRotation = currentRotation;
+    dragStartX = touch.clientX;
+    dragStartY = touch.clientY;
+    e.preventDefault();
+};
+
+const handleTouchMove = (e) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    
+    const touch = e.touches[0];
+    const currentAngle = getAngle(touch.clientX, touch.clientY);
+    const angleDelta = currentAngle - startAngle;
+    
+    currentRotation = startRotation + angleDelta;
+    
+    wheelGroup.setAttribute('transform', `rotate(${currentRotation} ${centerX} ${centerY})`);
+    updateLabelRotations();
+    e.preventDefault();
+};
+
+const handleTouchEnd = (e) => {
+    if (isDragging && e.changedTouches.length > 0) {
+        const touch = e.changedTouches[0];
+        const didDrag = hasDraggedEnough(dragStartX, dragStartY, touch.clientX, touch.clientY);
+        isDragging = false;
+        svg.classList.remove('dragging');
+        
+        // If we didn't drag enough, treat it as a tap
+        if (!didDrag) {
+            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (elementBelow && elementBelow !== svg) {
+                // Find the corresponding segment or label
+                const sliceElement = elementBelow.closest('path') || elementBelow.closest('text');
+                if (sliceElement && sliceElement.__clickHandler) {
+                    sliceElement.__clickHandler();
+                }
+            }
+        }
+    }
+};
+
+// Store all labels for rotation updates
+const allLabels = [];
+
+// Function to update label rotations to keep them readable
+const updateLabelRotations = () => {
+    allLabels.forEach(labelInfo => {
+        const { label, baseRotation, labelX, labelY, midAngle } = labelInfo;
+        // Calculate the current global angle of the label
+        const totalAngle = currentRotation + midAngle;
+        
+        // Normalize angle to 0-360 range
+        const adjustedAngle = ((totalAngle % 360) + 360) % 360;
+        
+        // Only flip if the label would be upside down (between 90 and 270 degrees)
+        const needsFlip = adjustedAngle > 90 && adjustedAngle < 270;
+        
+        // Maintain radial orientation, add 180 if needs flip
+        const rotation = needsFlip ? midAngle + 180 : midAngle;
+        
+        label.setAttribute('transform', `rotate(${rotation}, ${labelX}, ${labelY})`);
+    });
+};
+
+// Add event listeners to SVG
+svg.addEventListener('mousedown', handleMouseDown);
+window.addEventListener('mousemove', handleMouseMove);
+window.addEventListener('mouseup', handleMouseUp);
+
+svg.addEventListener('touchstart', handleTouchStart, { passive: false });
+window.addEventListener('touchmove', handleTouchMove, { passive: false });
+window.addEventListener('touchend', handleTouchEnd, { passive: false });
+window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+// Prevent context menu on mobile
+svg.addEventListener('contextmenu', (e) => e.preventDefault());
+
+const createPieChart = (data, total, radius, currentAngle, fontSize, labelOffset) => {
+    data.forEach(slice => {
+        const sliceAngle = (slice.value / total) * 360;
+
+        const x1 = centerX + radius * Math.cos((currentAngle * Math.PI) / 180);
+        const y1 = centerY + radius * Math.sin((currentAngle * Math.PI) / 180);
+        currentAngle += sliceAngle;
+        const x2 = centerX + radius * Math.cos((currentAngle * Math.PI) / 180);
+        const y2 = centerY + radius * Math.sin((currentAngle * Math.PI) / 180);
+
+        const largeArcFlag = sliceAngle > 180 ? 1 : 0;
+        const pathData = `M${centerX},${centerY} L${x1},${y1} A${radius},${radius} 0 ${largeArcFlag} 1 ${x2},${y2} Z`;
+
+        const sliceElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        sliceElement.setAttribute('d', pathData);
+        sliceElement.setAttribute('fill', slice.color);
+        
+        // Calculate midpoint angle for rotation
+        const midAngle = currentAngle - sliceAngle / 2;
+        const labelX = centerX + (radius - labelOffset) * Math.cos((midAngle * Math.PI) / 180);
+        const labelY = centerY + (radius - labelOffset) * Math.sin((midAngle * Math.PI) / 180);
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', labelX);
+        label.setAttribute('y', labelY);
+        label.setAttribute('fill', '#000');
+        label.setAttribute('font-size', fontSize);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('dominant-baseline', 'middle');
+        label.textContent = slice.label.toUpperCase();
+
+        // Store the base rotation for this label
+        const baseRotation = midAngle;  // Just the radial angle
+        label.setAttribute('data-base-rotation', baseRotation);
+        label.setAttribute('data-label-x', labelX);
+        label.setAttribute('data-label-y', labelY);
+        
+        // Store label info for rotation updates
+        allLabels.push({
+            label: label,
+            baseRotation: baseRotation,
+            labelX: labelX,
+            labelY: labelY,
+            midAngle: midAngle
+        });
+        
+        // Initial rotation - labels follow their radial position, flip if needed
+        const initialRotation = (midAngle >= 90 && midAngle <= 270) ? midAngle + 180 : midAngle;
+        label.setAttribute('transform', `rotate(${initialRotation}, ${labelX}, ${labelY})`);
+
+        // Create a click handler function
+        const clickHandler = () => {
+            highlightSegment(sliceElement, slice);
+        };
+        
+        // Store click handler reference for touch events
+        sliceElement.__clickHandler = clickHandler;
+        label.__clickHandler = clickHandler;
+        
+        // Add click event listeners
+        label.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clickHandler();
+        });
+        
+        sliceElement.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clickHandler();
+        });
+        
+        wheelGroup.appendChild(sliceElement);
+        wheelGroup.appendChild(label);
+    });
+};
+
+const updateInfoDisplay = () => {
+    const heading = document.getElementById('info-heading');
+    const text = document.getElementById('info-text');
+    const stratHead = document.getElementById('info-heading-strat');
+    const stratText = document.getElementById('info-strategies');
+
+    if (!selectedSlice) {
+        heading.textContent = "Emotion information";
+        text.textContent = "Select an emotion to begin or try spinning the wheel.";
+        stratHead.textContent = "";
+        stratText.textContent = "";
+    } else {
+        const { slice } = selectedSlice;
+        heading.innerHTML = `Do you feel <b>${slice.label.toLowerCase()}</b>?`;
+        text.textContent = slice.description;
+        stratHead.textContent = `This may help when you feel ${slice.label.toLowerCase()}`;
+        stratText.innerHTML = slice.strategy;
+    }
+};
+
+// Modified highlight function to only handle single selection
+const highlightSegment = (segment, slice) => {
+    const label = slice.label;
+
+    // If clicking the already selected segment, deselect it
+    if (selectedSlice && selectedSlice.label === label) {
+        segment.setAttribute('fill', segment.dataset.originalColor);
+        selectedSlice = null;
+    } else {
+        // Deselect the previous segment if there is one
+        if (selectedSlice) {
+            selectedSlice.element.setAttribute('fill', selectedSlice.element.dataset.originalColor);
+        }
+        
+        // Select the new segment
+        segment.dataset.originalColor = segment.getAttribute('fill');
+        segment.setAttribute('fill', 'white');
+        selectedSlice = { label, element: segment, slice };
+    }
+    
+    updateInfoDisplay();
+};
+
+// Draw the top pie chart (middle)
+createPieChart(data2, total2, 350, currentAngle2, 22, 90);
+
+// Draw the core emotions chart (smallest)
+createPieChart(data1, total1, 175, currentAngle1, 22, 75);
+});</script>
