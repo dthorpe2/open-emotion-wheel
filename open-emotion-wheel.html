@@ -4,13 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Open Emotion Wheel</title>
-    <!-- VERSION 0.1.1 -->
+    <!-- VERSION 1.2.0 -->
     <style>
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
     	}
+        
+        html, body {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            overflow-x: hidden;
+        }
+        
         /* Container for pie chart and info */
         #container {
             display: flex;
@@ -30,21 +39,36 @@
             margin: 0;
             padding: 0;
             display: block;
+            cursor: grab;
+            touch-action: none; /* Prevent default touch behaviors */
+            -webkit-user-select: none; /* Prevent selection on iOS */
+            -webkit-touch-callout: none; /* Prevent callout on iOS */
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+        }
+        
+        #pie-chart.dragging {
+            cursor: grabbing;
         }
         
         #pie-chart path {
           cursor: pointer; /* Change the cursor to pointer on hover */
+          pointer-events: all;
         }
         
         #pie-chart text {
     		user-select: none; /* Prevent text selection */
             cursor: pointer;
+            pointer-events: all;
 		}
         
         /* Info section styling */
         #info {
             margin-top: 20px;
             text-align: left;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
         }
         
         #info-text {
@@ -78,15 +102,13 @@
             
     </style>
 
-    <h1>Interactive Emotions Wheel</h1>
-    <p class="subtitle">Explore your feelings and discover strategies for emotional well-being</p>
-    <p class="instructions">Click on the emotions in the wheel to learn more about them and find helpful coping strategies.</p>
-
 	<div id="container">
-    	<svg id="pie-chart" viewBox="0 0 800 800"></svg>
+    	<svg id="pie-chart" viewBox="0 0 800 800">
+            <g id="wheel-group" transform="rotate(0 400 400)"></g>
+        </svg>
     	<div id="info">
-        	<h2 id="info-heading">Symptom information</h2>
-        	<p id="info-text">Click on a symptom to begin.</p>
+        	<h2 id="info-heading">Emotion information</h2>
+        	<p id="info-text">Click on an emotion to begin.</p>
             <h3 id="info-heading-strat"></h3>
             <p id="info-strategies"></p>
         </div>
@@ -94,6 +116,13 @@
     <script>document.addEventListener("DOMContentLoaded", function() {
       
     const selectedSlices = []; // Store up to 2 selected slices
+    let currentRotation = 0;
+    let isDragging = false;
+    let startAngle = 0;
+    let startRotation = 0;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragThreshold = 5; // pixels
   
     const data1 = [
             { value: 20, color: '#f4d03f', label: 'Happy' , description: 'You might feel a warm sense of joy spreading through your chest, with an urge to smile or laugh. It often makes you want to share your good mood with others or celebrate the moment.', strategy: '1. Savour the moment by fully immersing yourself in the experience, appreciating the sights, sounds, and feelings of happiness.<br>2. Share your joy with others by telling friends or family about what made you happy, spreading positivity and deepening your connections.<br>3. Reflect on what brought you happiness and consider how you can create similar moments in the future, whether through activities or connections.'},
@@ -12839,11 +12868,150 @@ const emotionPairs = {
     let currentAngle3 = 0;
 
     const svg = document.getElementById('pie-chart');
+    const wheelGroup = document.getElementById('wheel-group');
     const centerX = 400;
     const centerY = 400;
     let selectedSegment = null; // To track the currently selected segment
     
-       const createPieChart = (data, total, radius, currentAngle, fontSize, labelOffset) => {
+    // Store all labels for rotation updates
+    const allLabels = [];
+    
+    // Function to get angle from center
+    const getAngle = (x, y) => {
+        const rect = svg.getBoundingClientRect();
+        const svgCenterX = rect.left + rect.width / 2;
+        const svgCenterY = rect.top + rect.height / 2;
+        return Math.atan2(y - svgCenterY, x - svgCenterX) * (180 / Math.PI);
+    };
+
+    // Check if movement exceeded threshold
+    const hasDraggedEnough = (startX, startY, currentX, currentY) => {
+        const distance = Math.sqrt(Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2));
+        return distance > dragThreshold;
+    };
+
+    // Mouse event handlers
+    const handleMouseDown = (e) => {
+        isDragging = true;
+        svg.classList.add('dragging');
+        startAngle = getAngle(e.clientX, e.clientY);
+        startRotation = currentRotation;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        e.preventDefault();
+    };
+
+    const handleMouseMove = (e) => {
+        if (!isDragging) return;
+        
+        const currentAngle = getAngle(e.clientX, e.clientY);
+        const angleDelta = currentAngle - startAngle;
+        
+        currentRotation = startRotation + angleDelta;
+        
+        wheelGroup.setAttribute('transform', `rotate(${currentRotation} ${centerX} ${centerY})`);
+        updateLabelRotations();
+    };
+
+    const handleMouseUp = (e) => {
+        if (isDragging) {
+            const didDrag = hasDraggedEnough(dragStartX, dragStartY, e.clientX, e.clientY);
+            isDragging = false;
+            svg.classList.remove('dragging');
+            
+            // If we didn't drag enough, treat it as a click
+            if (!didDrag) {
+                // Find what element we're over and trigger click
+                const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+                if (elementBelow && elementBelow !== svg) {
+                    elementBelow.click();
+                }
+            }
+        }
+    };
+
+    // Touch event handlers
+    const handleTouchStart = (e) => {
+        if (e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        isDragging = true;
+        svg.classList.add('dragging');
+        startAngle = getAngle(touch.clientX, touch.clientY);
+        startRotation = currentRotation;
+        dragStartX = touch.clientX;
+        dragStartY = touch.clientY;
+        e.preventDefault();
+    };
+
+    const handleTouchMove = (e) => {
+        if (!isDragging || e.touches.length !== 1) return;
+        
+        const touch = e.touches[0];
+        const currentAngle = getAngle(touch.clientX, touch.clientY);
+        const angleDelta = currentAngle - startAngle;
+        
+        currentRotation = startRotation + angleDelta;
+        
+        wheelGroup.setAttribute('transform', `rotate(${currentRotation} ${centerX} ${centerY})`);
+        updateLabelRotations();
+        e.preventDefault();
+    };
+
+    const handleTouchEnd = (e) => {
+        if (isDragging && e.changedTouches.length > 0) {
+            const touch = e.changedTouches[0];
+            const didDrag = hasDraggedEnough(dragStartX, dragStartY, touch.clientX, touch.clientY);
+            isDragging = false;
+            svg.classList.remove('dragging');
+            
+            // If we didn't drag enough, treat it as a tap
+            if (!didDrag) {
+                const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (elementBelow && elementBelow !== svg) {
+                    // Find the corresponding segment or label
+                    const sliceElement = elementBelow.closest('path') || elementBelow.closest('text');
+                    if (sliceElement && sliceElement.__clickHandler) {
+                        sliceElement.__clickHandler();
+                    }
+                }
+            }
+        }
+    };
+
+    // Function to update label rotations to keep them readable
+    const updateLabelRotations = () => {
+        allLabels.forEach(labelInfo => {
+            const { label, baseRotation, labelX, labelY, midAngle } = labelInfo;
+            // Calculate the current global angle of the label
+            const totalAngle = currentRotation + midAngle;
+            
+            // Normalize angle to 0-360 range
+            const adjustedAngle = ((totalAngle % 360) + 360) % 360;
+            
+            // Only flip if the label would be upside down (between 90 and 270 degrees)
+            const needsFlip = adjustedAngle > 90 && adjustedAngle < 270;
+            
+            // Maintain radial orientation, add 180 if needs flip
+            const rotation = needsFlip ? midAngle + 180 : midAngle;
+            
+            label.setAttribute('transform', `rotate(${rotation}, ${labelX}, ${labelY})`);
+        });
+    };
+
+    // Add event listeners to SVG
+    svg.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    svg.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: false });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    // Prevent context menu on mobile
+    svg.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    const createPieChart = (data, total, radius, currentAngle, fontSize, labelOffset) => {
         data.forEach(slice => {
             const sliceAngle = (slice.value / total) * 360;
 
@@ -12873,28 +13041,56 @@ const emotionPairs = {
             label.setAttribute('fill', '#000');
             label.setAttribute('font-size', fontSize);
             label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('dominant-baseline', 'middle');
             label.textContent = slice.label;
 
-            // Rotate the label if the angle is between 90 and 270 degrees
-            const adjustedAngle = (midAngle >= 90 && midAngle <= 270) ? midAngle + 180 : midAngle;
-            label.setAttribute('transform', `rotate(${adjustedAngle}, ${labelX}, ${labelY})`);
+            // Store the base rotation for this label
+            const baseRotation = midAngle;
+            label.setAttribute('data-base-rotation', baseRotation);
+            label.setAttribute('data-label-x', labelX);
+            label.setAttribute('data-label-y', labelY);
+            
+            // Store label info for rotation updates
+            allLabels.push({
+                label: label,
+                baseRotation: baseRotation,
+                labelX: labelX,
+                labelY: labelY,
+                midAngle: midAngle
+            });
+            
+            // Initial rotation - labels follow their radial position, flip if needed
+            const initialRotation = (midAngle >= 90 && midAngle <= 270) ? midAngle + 180 : midAngle;
+            label.setAttribute('transform', `rotate(${initialRotation}, ${labelX}, ${labelY})`);
 
-            // Add click event listener to each text element, simulating a click on the segment
-            label.addEventListener('click', () => {
+            // Create a click handler function
+            const clickHandler = () => {
                 highlightSegment(sliceElement, slice);
+            };
+            
+            // Store click handler reference for touch events
+            sliceElement.__clickHandler = clickHandler;
+            label.__clickHandler = clickHandler;
+
+            // Add click event listener to each text element
+            label.addEventListener('click', (e) => {
+                e.stopPropagation();
+                clickHandler();
             });
             
             // Add click event listener to each segment
-            sliceElement.addEventListener('click', () => {
-                highlightSegment(sliceElement, slice);
+            sliceElement.addEventListener('click', (e) => {
+                e.stopPropagation();
+                clickHandler();
             });
 
             
-            svg.appendChild(sliceElement);
-            svg.appendChild(label);
+            wheelGroup.appendChild(sliceElement);
+            wheelGroup.appendChild(label);
         });
         
     };
+    
     const updateInfoDisplay = () => {
         const heading = document.getElementById('info-heading');
         const text = document.getElementById('info-text');
@@ -12902,8 +13098,8 @@ const emotionPairs = {
         const stratText = document.getElementById('info-strategies');
 
         if (selectedSlices.length === 0) {
-            heading.textContent = "Symptom information";
-            text.textContent = "Click on a symptom to begin.";
+            heading.textContent = "Emotion information";
+            text.textContent = "Click on an emotion to begin.";
             stratHead.textContent = "";
             stratText.textContent = "";
         } else if (selectedSlices.length === 1) {
@@ -12931,8 +13127,9 @@ const emotionPairs = {
             }
         }
     };
+    
     // Add click event listener to each segment
-        const highlightSegment = (segment, slice) => {
+    const highlightSegment = (segment, slice) => {
           const label = slice.label;
   
           // Check if slice is already selected
@@ -12967,3 +13164,5 @@ const emotionPairs = {
 
     
 });</script>
+</document_content>
+</invoke>
